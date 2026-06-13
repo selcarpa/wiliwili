@@ -2,7 +2,6 @@ name: Build PortMaster
 
 on:
   push:
-    branches: ["yoga"]
   workflow_dispatch:
 
 jobs:
@@ -57,7 +56,7 @@ jobs:
       - name: Package for PortMaster
         run: |
           PKG="wiliwili.port"
-          mkdir -p "$PKG/libs"
+          mkdir -p "$PKG/libs" "$PKG/resources"
 
           # Copy binary
           cp build/wiliwili "$PKG/wiliwili.aarch64"
