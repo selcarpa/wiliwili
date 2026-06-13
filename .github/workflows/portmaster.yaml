@@ -41,6 +41,8 @@ jobs:
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_FLAGS="-march=armv8-a -mtune=generic" \
+            -DCMAKE_CXX_FLAGS="-march=armv8-a -mtune=generic" \
             -DPLATFORM_DESKTOP=ON \
             -DUSE_SDL2=ON \
             -DUSE_GLES2=ON \
@@ -61,16 +63,25 @@ jobs:
           # Copy binary
           cp build/wiliwili "$PKG/wiliwili.aarch64"
 
-          # Collect runtime libraries
+          # Collect runtime libraries (excluding GPU drivers which must come from target device)
           collect_libs() {
             ldd "$1" 2>/dev/null | grep -oP '/\S+' | sort -u
           }
+          skip_lib() {
+            local lib="$1"
+            case "$(basename "$lib")" in
+              libEGL*|libGLES*|libGL*|libdrm*|libgbm*|libvulkan*|libOpenCL*) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
           copy_lib() {
-            local lib="$1"; local dest="$PKG/libs/$(basename "$lib")"
-            [ -f "$dest" ] && return; cp -L "$lib" "$dest" 2>/dev/null || true
+            local lib="$1"
+            skip_lib "$lib" && return
+            local dest="$PKG/libs/$(basename "$lib")"
+            [ -f "$dest" ] && return
+            cp -L "$lib" "$dest" 2>/dev/null || true
           }
           while IFS= read -r lib; do
-            case "$lib" in /lib/|/lib64/|/usr/lib/|/usr/lib64/) continue;; esac
             copy_lib "$lib"
           done < <(collect_libs "$PKG/wiliwili.aarch64")
           PREV=0; CURR=$(ls "$PKG/libs/" 2>/dev/null | wc -l)
@@ -78,7 +89,6 @@ jobs:
             PREV=$CURR
             while IFS= read -r -d '' f; do
               while IFS= read -r lib; do
-                case "$lib" in /lib/|/lib64/|/usr/lib/|/usr/lib64/) continue;; esac
                 copy_lib "$lib"
               done < <(collect_libs "$f")
             done < <(find "$PKG/libs/" -name '*.so*' -print0)
@@ -86,7 +96,7 @@ jobs:
           done
 
           # Copy resources
-          cp -r resources/* "$PKG/resources/"
+          cp -r resources/* "$PKG/resources/" 2>/dev/null || true
 
           # Copy launcher and metadata
           cp scripts/portmaster/wiliwili.sh "$PKG/"
