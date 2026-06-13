@@ -11,7 +11,7 @@
                 tabItemActiveTextColor="@theme/color/bilibili"
                 defaultTab="0"
                 demandMode="false"
-                sidebarWidth="240"
+                sidebarWidth="160"
                 sidebarPosition="left">
 
             <Tab label="@i18n/wiliwili/setting/app/playback/header"

@@ -476,7 +476,7 @@ void DynamicArticleDetail::toggleCommentMode() {
 
 DynamicArticleView::DynamicArticleView() {
     this->inflateFromXMLRes("xml/views/dynamic_card.xml");
-    if (brls::Application::ORIGINAL_WINDOW_HEIGHT == 544) {
+    if (brls::Application::ORIGINAL_WINDOW_HEIGHT < 720) {
         videoArea->setWidthPercentage(80);
         videoAreaForward->setWidthPercentage(80);
         textBox->setMaxRows(3);
@@ -543,14 +543,14 @@ void DynamicArticleView::setCard(const bilibili::DynamicArticleResult& result) {
                         if (!image) break;
                         // 图片
                         RichTextData d;
-                        float size = brls::Application::ORIGINAL_WINDOW_HEIGHT == 544 ? 18 : 36;
+                        float size = brls::Application::ORIGINAL_WINDOW_HEIGHT < 720 ? 18 : 36;
                         if (image->items.size() <= 3)
                             size *= 4;
                         else if (image->items.size() <= 6)
                             size *= 3;
                         else
                             size *= 2;
-                        float margin = brls::Application::ORIGINAL_WINDOW_HEIGHT == 544 ? 4 : 8;
+                        float margin = brls::Application::ORIGINAL_WINDOW_HEIGHT < 720 ? 4 : 8;
                         int i        = 0;
                         for (auto& p : image->items) {
                             auto item      = std::make_shared<RichTextImage>(p.src + ImageHelper::note_ext, size, size);
@@ -698,9 +698,9 @@ void DynamicArticleView::setForwardCard(const bilibili::dynamic_forward::Dynamic
                         if (!image) break;
                         // 图片
                         RichTextData d;
-                        float size = brls::Application::ORIGINAL_WINDOW_HEIGHT == 544 ? 18 : 36;
+                        float size = brls::Application::ORIGINAL_WINDOW_HEIGHT < 720 ? 18 : 36;
                         size *= 4 - ((image->items.size() - 1) / 3);
-                        float margin = brls::Application::ORIGINAL_WINDOW_HEIGHT == 544 ? 4 : 8;
+                        float margin = brls::Application::ORIGINAL_WINDOW_HEIGHT < 720 ? 4 : 8;
                         // 显示为正方形缩略图
                         int i = 0;
                         for (auto& p : image->items) {

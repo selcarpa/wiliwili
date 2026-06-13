@@ -223,6 +223,25 @@ void Register::initCustomStyle() {
         brls::getStyle().addMetric("brls/tab_frame/content_padding_sides", 30);
     } else {
         switch (brls::Application::ORIGINAL_WINDOW_HEIGHT) {
+            case 480:
+                brls::getStyle().addMetric("wiliwili/grid/span/5", 3);
+                brls::getStyle().addMetric("wiliwili/grid/span/4", 2);
+                brls::getStyle().addMetric("wiliwili/grid/span/3", 2);
+                brls::getStyle().addMetric("wiliwili/grid/span/2", 1);
+                brls::getStyle().addMetric("wiliwili/player/width", brls::Application::ORIGINAL_WINDOW_WIDTH - 260);
+                brls::getStyle().addMetric("wiliwili/player/bottom/font", 10);
+                brls::getStyle().addMetric("wiliwili/comment/level/x", 25);
+                brls::getStyle().addMetric("wiliwili/margin/20", 8);
+                brls::getStyle().addMetric("wiliwili/about/qr", 120);
+                brls::getStyle().addMetric("wiliwili/about/speech/width", 420);
+                brls::getStyle().addMetric("wiliwili/about/speech/header", 460);
+                brls::getStyle().addMetric("wiliwili/tab_frame/content_padding_top_bottom", 16);
+                brls::getStyle().addMetric("wiliwili/mine/num", 14);
+                brls::getStyle().addMetric("wiliwili/mine/type", 10);
+                brls::getStyle().addMetric("wiliwili/setting/about/bottom", 10);
+                brls::getStyle().addMetric("wiliwili/dynamic/video/card/padding", 8);
+                brls::getStyle().addMetric("brls/tab_frame/content_padding_sides", 20);
+                break;
             case 1080:
                 brls::getStyle().addMetric("wiliwili/grid/span/5", 7);
                 brls::getStyle().addMetric("wiliwili/grid/span/4", 6);

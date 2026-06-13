@@ -261,7 +261,7 @@ DynamicTab::DynamicTab() {
         }
     });
     // 如果显示为小屏模式，调整卡片尺寸
-    if (brls::Application::ORIGINAL_WINDOW_HEIGHT == 544) {
+    if (brls::Application::ORIGINAL_WINDOW_HEIGHT < 720) {
         articleRecyclingGrid->setPaddingLeft(100);
         articleRecyclingGrid->setPaddingRight(100);
     }

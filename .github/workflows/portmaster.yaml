@@ -1,0 +1,115 @@
+name: Build PortMaster
+
+on:
+  push:
+    branches: ["yoga"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [aarch64]
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Init nested submodules
+        run: |
+          git submodule update --init --recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libmpv-dev libwebp-dev libssl-dev libsdl2-dev \
+            libcurl4-openssl-dev libgl1-mesa-dev \
+            libegl1-mesa-dev libgles2-mesa-dev \
+            libass-dev libuchardet-dev \
+            pkg-config cmake build-essential
+
+      - name: Apply borealis SDL gamepad patch
+        run: |
+          patch -d library/borealis -p1 < patches/borealis_sdl_gamepad.patch
+          echo "Patch applied: SDL input now loads gamecontrollerdb.txt"
+
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPLATFORM_DESKTOP=ON \
+            -DUSE_SDL2=ON \
+            -DUSE_GLES2=ON \
+            -DUSE_SYSTEM_SDL2=ON \
+            -DUSE_SYSTEM_CURL=ON \
+            -DBRLS_UNITY_BUILD=ON \
+            -DCMAKE_UNITY_BUILD_BATCH_SIZE=16
+
+      - name: Build
+        run: |
+          cmake --build build -j$(nproc) --target wiliwili
+
+      - name: Package for PortMaster
+        run: |
+          PKG="wiliwili.port"
+          mkdir -p "$PKG/libs"
+
+          # Copy binary
+          cp build/wiliwili "$PKG/wiliwili.aarch64"
+
+          # Collect runtime libraries
+          collect_libs() {
+            ldd "$1" 2>/dev/null | grep -oP '/\S+' | sort -u
+          }
+          copy_lib() {
+            local lib="$1"; local dest="$PKG/libs/$(basename "$lib")"
+            [ -f "$dest" ] && return; cp -L "$lib" "$dest" 2>/dev/null || true
+          }
+          while IFS= read -r lib; do
+            case "$lib" in /lib/|/lib64/|/usr/lib/|/usr/lib64/) continue;; esac
+            copy_lib "$lib"
+          done < <(collect_libs "$PKG/wiliwili.aarch64")
+          PREV=0; CURR=$(ls "$PKG/libs/" 2>/dev/null | wc -l)
+          while [ "$CURR" -gt "$PREV" ]; do
+            PREV=$CURR
+            while IFS= read -r -d '' f; do
+              while IFS= read -r lib; do
+                case "$lib" in /lib/|/lib64/|/usr/lib/|/usr/lib64/) continue;; esac
+                copy_lib "$lib"
+              done < <(collect_libs "$f")
+            done < <(find "$PKG/libs/" -name '*.so*' -print0)
+            CURR=$(ls "$PKG/libs/" 2>/dev/null | wc -l)
+          done
+
+          # Copy resources
+          cp -r resources/* "$PKG/resources/"
+
+          # Copy launcher and metadata
+          cp scripts/portmaster/wiliwili.sh "$PKG/"
+          cp scripts/portmaster/port.json "$PKG/"
+          cp scripts/portmaster/wiliwili.gptk "$PKG/"
+          cp resources/icon/icon.png "$PKG/wiliwili.png"
+
+          # Gamecontroller DB
+          if [ -f resources/gamepad/gamecontrollerdb.txt ]; then
+            cp resources/gamepad/gamecontrollerdb.txt "$PKG/"
+          else
+            wget -q https://raw.githubusercontent.com/gabomdq/SDL_GameControllerDB/master/gamecontrollerdb.txt \
+              -O "$PKG/gamecontrollerdb.txt" || true
+          fi
+
+          chmod +x "$PKG/wiliwili.sh" "$PKG/wiliwili.aarch64"
+
+          # Create zip
+          zip -r "wiliwili-Linux-aarch64-portmaster.zip" "$PKG/"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: wiliwili-Linux-aarch64-portmaster
+          path: wiliwili-Linux-aarch64-portmaster.zip

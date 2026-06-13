@@ -548,6 +548,9 @@ void ProgramConfig::load() {
     } else if (UIScale == "1080p") {
         brls::Application::ORIGINAL_WINDOW_WIDTH  = 1920;
         brls::Application::ORIGINAL_WINDOW_HEIGHT = 1080;
+    } else if (UIScale == "480p") {
+        brls::Application::ORIGINAL_WINDOW_WIDTH  = 640;
+        brls::Application::ORIGINAL_WINDOW_HEIGHT = 480;
     } else {
         brls::Application::ORIGINAL_WINDOW_WIDTH  = WILI_WINDOW_WIDTH_DEFAULT;
         brls::Application::ORIGINAL_WINDOW_HEIGHT = WILI_WINDOW_HEIGHT_DEFAULT;

@@ -3,7 +3,7 @@
         width="auto"
         height="auto">
     <RecyclingGrid
-            width="270"
+            width="200"
             paddingLeft="10"
             paddingRight="10"
             marginTop="20"

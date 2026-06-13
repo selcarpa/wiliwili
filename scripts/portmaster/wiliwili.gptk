@@ -1,0 +1,45 @@
+# gptokeyb 配置文件 for wiliwili
+# wiliwili 原生支持 SDL GameController 输入，所以所有按键直接通过 SDL 传递
+# gptokeyb 只要提供退出手势（Select + Start）
+#
+# 按键绑定：
+#   手柄按钮       →  SDL 按键
+#   A             →  A (确认)
+#   B             →  B (返回)
+#   X             →  X
+#   Y             →  Y
+#   D-Pad         →  方向
+#   Left Stick    →  导航
+#   Start         →  暂停/菜单
+#   Select        →  切换
+#   LB/RB         →  肩键
+#   LT/RT         →  扳机
+#   Left Stick点击 →  LSB
+#   Right Stick点击 → RSB
+
+# 禁用所有按键映射（wiliwili 原生处理输入）
+# 只用 Select + Start 作为退出热键
+back = ""
+start = ""
+a = ""
+b = ""
+x = ""
+y = ""
+l1 = ""
+l2 = ""
+l3 = ""
+r1 = ""
+r2 = ""
+r3 = ""
+up = ""
+down = ""
+left = ""
+right = ""
+left_analog_up = ""
+left_analog_down = ""
+left_analog_left = ""
+left_analog_right = ""
+right_analog_up = ""
+right_analog_down = ""
+right_analog_left = ""
+right_analog_right = ""
