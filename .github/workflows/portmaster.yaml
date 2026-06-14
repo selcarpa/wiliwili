@@ -95,10 +95,8 @@ jobs:
             cp resources/gamepad/gamecontrollerdb.txt "$PKG/" || true
           chmod +x "$PKG/wiliwili.sh" "$PKG/wiliwili.aarch64"
 
-          zip -r "wiliwili-Linux-aarch64-portmaster.zip" "$PKG/"
-
       - name: Upload
         uses: actions/upload-artifact@v6
         with:
           name: wiliwili-Linux-aarch64-portmaster
-          path: wiliwili-Linux-aarch64-portmaster.zip
+          path: wiliwili.port/
