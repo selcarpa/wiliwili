@@ -7,14 +7,12 @@ on:
 env:
   CFLAGS: "-march=armv8-a -mtune=generic -O2"
   CXXFLAGS: "-march=armv8-a -mtune=generic -O2"
-  PREFIX: /opt/wiliwili
 
 jobs:
   build:
     runs-on: ubuntu-24.04-arm
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 0
@@ -22,67 +20,21 @@ jobs:
       - name: Init nested submodules
         run: git submodule update --init --recursive
 
-      - name: Install build dependencies
+      - name: Install deps
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake pkg-config meson ninja-build nasm \
-            libssl-dev libsdl2-dev libcurl4-openssl-dev \
-            libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
-            libwebp-dev libuchardet-dev libfreetype-dev \
-            libfontconfig-dev libfribidi-dev libharfbuzz-dev \
-            libz-dev python3
+            libmpv-dev libwebp-dev libssl-dev libsdl2-dev \
+            libcurl4-openssl-dev libgl1-mesa-dev \
+            libegl1-mesa-dev libgles2-mesa-dev \
+            libass-dev libuchardet-dev libfreetype-dev \
+            pkg-config cmake build-essential
 
-      - name: Build FFmpeg (minimal)
-        run: |
-          git clone --depth=1 --branch=release/7.1 https://git.ffmpeg.org/ffmpeg.git /tmp/ffmpeg
-          cd /tmp/ffmpeg
-          ./configure --prefix=$PREFIX --enable-shared --disable-static \
-            --disable-doc --disable-programs --disable-encoders --disable-muxers \
-            --disable-devices --disable-bsfs --disable-filters --disable-parsers \
-            --disable-postproc --enable-pic --enable-rpath \
-            --enable-decoder='h264,hevc,vp8,vp9,av1,aac,mp3,opus,flac,vorbis,aac_latm' \
-            --enable-demuxer='aac,ac3,ape,asf,avi,flac,flv,h264,hls,matroska,mov,mp3,mpegts,ogg,wav,webm' \
-            --enable-protocol='file,http,tcp,tls,https,httpproxy' \
-            --disable-network --enable-network \
-            --extra-cflags="$CFLAGS" --extra-cxxflags="$CXXFLAGS"
-          make -j$(nproc)
-          make install
+      - name: Apply SDL gamepad patch
+        run: patch -d library/borealis -p1 < patches/borealis_sdl_gamepad.patch
 
-      - name: Build libplacebo
+      - name: Configure
         run: |
-          git clone --depth=1 --branch=v7.349.0 https://github.com/haasn/libplacebo.git /tmp/libplacebo
-          cd /tmp/libplacebo
-          meson setup build --prefix=$PREFIX --libdir=lib \
-            -Dvulkan=disabled -Dd3d11=disabled -Dopengl=enabled \
-            -Dgl-proc-addr=enabled -Dtests=false -Ddemos=false \
-            -Dlcms=disabled -Dshaderc=disabled
-          ninja -C build
-          ninja -C build install
-
-      - name: Build libmpv (minimal)
-        run: |
-          git clone --depth=1 --branch=v0.39.0 https://github.com/mpv-player/mpv.git /tmp/mpv
-          cd /tmp/mpv
-          PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig meson setup build --prefix=$PREFIX --libdir=lib \
-            -Dlibmpv=true -Dcplayer=false \
-            -Dvulkan=disabled -Ddvdnav=disabled -Dbluray=disabled \
-            -Djack=disabled -Dpulse=disabled -Dpipewire=disabled -Dsndio=disabled \
-            -Djavascript=disabled -Dlcms2=disabled -Dlibarchive=disabled \
-            -Dzimg=disabled -Drubberband=disabled \
-            -Dx11=disabled -Dwayland=disabled \
-            -Dlibplacebo=enabled \
-            -Degl=enabled -Dgles=enabled
-          ninja -C build
-          ninja -C build install
-
-      - name: Apply borealis SDL gamepad patch
-        run: |
-          patch -d library/borealis -p1 < patches/borealis_sdl_gamepad.patch
-
-      - name: Configure wiliwili
-        run: |
-          export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_FLAGS="$CFLAGS" \
@@ -90,49 +42,59 @@ jobs:
             -DPLATFORM_DESKTOP=ON \
             -DUSE_SDL2=ON -DUSE_GLES2=ON \
             -DUSE_SYSTEM_SDL2=ON -DUSE_SYSTEM_CURL=ON \
-            -DHOMEBREW_MPV=$PREFIX \
             -DBRLS_UNITY_BUILD=ON \
             -DCMAKE_UNITY_BUILD_BATCH_SIZE=16
 
-      - name: Build wiliwili
-        run: |
-          export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig
-          export LD_LIBRARY_PATH=$PREFIX/lib
-          cmake --build build -j$(nproc) --target wiliwili
+      - name: Build
+        run: cmake --build build -j$(nproc) --target wiliwili
 
       - name: Package
         run: |
           PKG="wiliwili.port"
           mkdir -p "$PKG/libs" "$PKG/resources"
-
           cp build/wiliwili "$PKG/wiliwili.aarch64"
-
-          # Bundle self-built libs + runtime deps from $PREFIX
-          for lib in $PREFIX/lib/libmpv.so* $PREFIX/lib/libavcodec.so* \
-                     $PREFIX/lib/libavformat.so* $PREFIX/lib/libavutil.so* \
-                     $PREFIX/lib/libswscale.so* $PREFIX/lib/libswresample.so* \
-                     $PREFIX/lib/libplacebo.so* $PREFIX/lib/libpostproc.so*; do
-            [ -f "$lib" ] && cp -L "$lib" "$PKG/libs/"
-          done
-
-          # Also bundle SDL2, curl, webp, uchardet (may not be on device)
-          for soname in libSDL2-2.0.so.0 libcurl.so.4 libssl.so.3 libcrypto.so.3 \
-                        libwebp.so.7 libuchardet.so.0; do
-            lib=$(ldconfig -p 2>/dev/null | grep -m1 "$soname " | awk '{print $NF}')
-            [ -n "$lib" ] && [ -f "$lib" ] && cp -L "$lib" "$PKG/libs/"
-          done
-
           strip "$PKG/wiliwili.aarch64" 2>/dev/null || true
+
+          # Collect all runtime deps recursively (skip GPU driver libs)
+          SKIP='libEGL\|libGLES\|libGL\.\|libdrm\|libgbm\|libvulkan'
+          collect() {
+            ldd "$1" 2>/dev/null | awk '{print $3}' | grep -v '^\s*$' | grep -v "$SKIP"
+          }
+          copy_lib() {
+            local src="$1" dst="$PKG/libs/$(basename "$src")"
+            [ -f "$dst" ] && return 0
+            cp -L "$src" "$dst" 2>/dev/null || return 1
+          }
+          # First pass: binary
+          while IFS= read -r lib; do
+            [ -z "$lib" ] && continue
+            copy_lib "$lib" || true
+          done < <(collect "$PKG/wiliwili.aarch64")
+          # Iterate until no new libs found
+          PREV=0; CURR=$(ls "$PKG/libs/" | wc -l)
+          while [ "$CURR" -gt "$PREV" ]; do
+            PREV=$CURR
+            for f in "$PKG/libs/"*.so*; do
+              while IFS= read -r lib; do
+                [ -z "$lib" ] && continue
+                copy_lib "$lib" || true
+              done < <(collect "$f")
+            done
+            CURR=$(ls "$PKG/libs/" | wc -l)
+          done
+
+          echo "=== Bundled: $(ls "$PKG/libs/" | wc -l) libs ==="
+          du -sh "$PKG/libs/"
 
           cp -r resources/* "$PKG/resources/" 2>/dev/null || true
           cp scripts/portmaster/wiliwili.sh "$PKG/"
           cp scripts/portmaster/port.json "$PKG/"
           cp scripts/portmaster/wiliwili.gptk "$PKG/"
           cp resources/icon/icon.png "$PKG/wiliwili.png"
+          [ -f resources/gamepad/gamecontrollerdb.txt ] && \
+            cp resources/gamepad/gamecontrollerdb.txt "$PKG/" || true
           chmod +x "$PKG/wiliwili.sh" "$PKG/wiliwili.aarch64"
 
-          echo "=== Bundled ($(ls $PKG/libs/ | wc -l) libs) ==="
-          ls -1 "$PKG/libs/"
           zip -r "wiliwili-Linux-aarch64-portmaster.zip" "$PKG/"
 
       - name: Upload
