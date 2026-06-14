@@ -56,7 +56,7 @@ jobs:
           strip "$PKG/wiliwili.aarch64" 2>/dev/null || true
 
           # Collect all runtime deps recursively (skip GPU driver libs)
-          SKIP='libEGL\|libGLES\|libGL\.\|libdrm\|libgbm\|libvulkan\|libc\.so\|libm\.so\|libstdc++\|libgcc_s\|ld-linux'
+          SKIP='libEGL\.\|libGLESv2\.\|libGL\.so\|libgbm\.\|libvulkan\.\|libc\.so\.\|libm\.so\.\|libstdc++\.\|libgcc_s\.\|ld-linux'
           collect() {
             ldd "$1" 2>/dev/null | awk '{print $3}' | grep -v '^\s*$' | grep -v "$SKIP"
           }
