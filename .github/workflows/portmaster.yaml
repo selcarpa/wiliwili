@@ -4,6 +4,10 @@ on:
   push:
   workflow_dispatch:
 
+env:
+  CFLAGS: "-march=armv8-a -mtune=generic -O2"
+  CXXFLAGS: "-march=armv8-a -mtune=generic -O2"
+
 jobs:
   build:
     strategy:
@@ -41,8 +45,8 @@ jobs:
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_FLAGS="-march=armv8-a -mtune=generic" \
-            -DCMAKE_CXX_FLAGS="-march=armv8-a -mtune=generic" \
+            -DCMAKE_C_FLAGS="$CFLAGS" \
+            -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
             -DPLATFORM_DESKTOP=ON \
             -DUSE_SDL2=ON \
             -DUSE_GLES2=ON \
@@ -54,6 +58,14 @@ jobs:
       - name: Build
         run: |
           cmake --build build -j$(nproc) --target wiliwili
+
+      - name: Check CPU features
+        run: |
+          echo "=== Binary CPU features ==="
+          readelf -A build/wiliwili | grep -E "Tag_CPU_arch|Tag_FP_arch|Tag_Advanced_SIMD|Tag_CRC32"
+          echo ""
+          echo "=== Largest libs ==="
+          du -sh /usr/lib/aarch64-linux-gnu/libmpv* /usr/lib/aarch64-linux-gnu/libav* 2>/dev/null
 
       - name: Package for PortMaster
         run: |
