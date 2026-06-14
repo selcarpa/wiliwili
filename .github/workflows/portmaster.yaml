@@ -59,13 +59,14 @@ jobs:
         run: |
           cmake --build build -j$(nproc) --target wiliwili
 
-      - name: Check CPU features
+      - name: Show binary deps
         run: |
-          echo "=== Binary CPU features ==="
-          readelf -A build/wiliwili | grep -E "Tag_CPU_arch|Tag_FP_arch|Tag_Advanced_SIMD|Tag_CRC32" || true
+          echo "=== wiliwili direct dependencies ==="
+          ldd build/wiliwili | grep -E '=>|not found'
           echo ""
-          echo "=== Largest libs ==="
-          du -sh /usr/lib/aarch64-linux-gnu/libmpv* /usr/lib/aarch64-linux-gnu/libav* 2>/dev/null || true
+          echo "=== Binary info ==="
+          file build/wiliwili
+          readelf -h build/wiliwili | grep -i 'machine\|entry\|class'
 
       - name: Package for PortMaster
         run: |
@@ -75,37 +76,42 @@ jobs:
           # Copy binary
           cp build/wiliwili "$PKG/wiliwili.aarch64"
 
-          # Collect runtime libraries (excluding GPU drivers which must come from target device)
-          collect_libs() {
-            ldd "$1" 2>/dev/null | grep -oP '/\S+' | sort -u
-          }
-          skip_lib() {
-            local lib="$1"
-            case "$(basename "$lib")" in
-              libEGL*|libGLES*|libGL*|libdrm*|libgbm*|libvulkan*|libOpenCL*) return 0 ;;
-              *) return 1 ;;
+          # Get direct library dependencies
+          LIBS=$(ldd build/wiliwili | awk '{print $3}' | grep -v '^$' | sort -u)
+
+          # Only bundle app-specific libs (skip system/display/audio/gpu libs)
+          BUNDLED=""
+          for lib in $LIBS; do
+            base=$(basename "$lib")
+            case "$base" in
+              # System libs - use device's own
+              ld-linux*|libc.so*|libm.so*|libstdc++*|libgcc_s*|libpthread*|librt*|libdl*|libresolv*|libnss*)
+                continue ;;
+              # Display/GPU - use device's own
+              libX*|libxcb*|libwayland*|libdecor*|libva*|libvdpau*|libEGL*|libGLES*|libGL*|libdrm*|libgbm*|libvulkan*)
+                continue ;;
+              # Audio - use device's own
+              libpulse*|libpipewire*|libjack*|libsndio*|libasound*|libopenal*)
+                continue ;;
+              # DBus - use device's own
+              libdbus*)
+                continue ;;
+              # System utilities - use device's own
+              libsystemd*|libudev*|libselinux*|libcap*|libmount*|libblkid*)
+                continue ;;
+              # Everything else - bundle
+              *)
+                cp -L "$lib" "$PKG/libs/" 2>/dev/null || true
+                BUNDLED="$BUNDLED $base"
+                ;;
             esac
-          }
-          copy_lib() {
-            local lib="$1"
-            skip_lib "$lib" && return
-            local dest="$PKG/libs/$(basename "$lib")"
-            [ -f "$dest" ] && return
-            cp -L "$lib" "$dest" 2>/dev/null || true
-          }
-          while IFS= read -r lib; do
-            copy_lib "$lib"
-          done < <(collect_libs "$PKG/wiliwili.aarch64")
-          PREV=0; CURR=$(ls "$PKG/libs/" 2>/dev/null | wc -l)
-          while [ "$CURR" -gt "$PREV" ]; do
-            PREV=$CURR
-            while IFS= read -r -d '' f; do
-              while IFS= read -r lib; do
-                copy_lib "$lib"
-              done < <(collect_libs "$f")
-            done < <(find "$PKG/libs/" -name '*.so*' -print0)
-            CURR=$(ls "$PKG/libs/" 2>/dev/null | wc -l)
           done
+
+          echo "=== Bundled libraries ==="
+          for f in "$PKG/libs/"*.so*; do
+            echo "  $(basename "$f")"
+          done
+          echo "Count: $(ls "$PKG/libs/" | wc -l)"
 
           # Copy resources
           cp -r resources/* "$PKG/resources/" 2>/dev/null || true
