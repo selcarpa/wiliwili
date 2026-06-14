@@ -73,66 +73,58 @@ jobs:
           PKG="wiliwili.port"
           mkdir -p "$PKG/libs" "$PKG/resources"
 
-          # Copy binary
           cp build/wiliwili "$PKG/wiliwili.aarch64"
 
-          # Get direct library dependencies
-          LIBS=$(ldd build/wiliwili | awk '{print $3}' | grep -v '^$' | sort -u)
+          # Resolve the NEEDED libs to their real paths (first level only)
+          resolve_lib() {
+            local soname="$1"
+            ldconfig -p 2>/dev/null | grep -m1 "$soname " | awk '{print $NF}'
+          }
 
-          # Only bundle app-specific libs (skip system/display/audio/gpu libs)
-          BUNDLED=""
-          for lib in $LIBS; do
-            base=$(basename "$lib")
-            case "$base" in
-              # System libs - use device's own
-              ld-linux*|libc.so*|libm.so*|libstdc++*|libgcc_s*|libpthread*|librt*|libdl*|libresolv*|libnss*)
-                continue ;;
-              # Display/GPU - use device's own
-              libX*|libxcb*|libwayland*|libdecor*|libva*|libvdpau*|libEGL*|libGLES*|libGL*|libdrm*|libgbm*|libvulkan*)
-                continue ;;
-              # Audio - use device's own
-              libpulse*|libpipewire*|libjack*|libsndio*|libasound*|libopenal*)
-                continue ;;
-              # DBus - use device's own
-              libdbus*)
-                continue ;;
-              # System utilities - use device's own
-              libsystemd*|libudev*|libselinux*|libcap*|libmount*|libblkid*)
-                continue ;;
-              # Everything else - bundle
-              *)
-                cp -L "$lib" "$PKG/libs/" 2>/dev/null || true
-                BUNDLED="$BUNDLED $base"
-                ;;
-            esac
+          # Only bundle these specific libs (PortMaster devices lack these)
+          BUNDLE_LIST="
+            libmpv.so.2
+            libavcodec.so.60
+            libavdevice.so.60
+            libavfilter.so.9
+            libavformat.so.60
+            libavutil.so.58
+            libswresample.so.4
+            libswscale.so.7
+            libpostproc.so.57
+            libplacebo.so.338
+            libshaderc_shared.so.1
+            libcurl.so.4
+            libssl.so.3
+            libcrypto.so.3
+            libwebp.so.7
+            libsharpyuv.so.0
+            libSDL2-2.0.so.0
+            libuchardet.so.0
+          "
+
+          for soname in $BUNDLE_LIST; do
+            libpath=$(resolve_lib "$soname")
+            if [ -n "$libpath" ] && [ -f "$libpath" ]; then
+              cp -L "$libpath" "$PKG/libs/"
+              echo "  bundled: $soname ($(du -sh "$libpath" | cut -f1))"
+            else
+              echo "  NOT FOUND: $soname"
+            fi
           done
 
-          echo "=== Bundled libraries ==="
-          for f in "$PKG/libs/"*.so*; do
-            echo "  $(basename "$f")"
-          done
-          echo "Count: $(ls "$PKG/libs/" | wc -l)"
+          echo "=== Bundled libs: $(ls "$PKG/libs/" | wc -l) ==="
 
-          # Copy resources
           cp -r resources/* "$PKG/resources/" 2>/dev/null || true
-
-          # Copy launcher and metadata
           cp scripts/portmaster/wiliwili.sh "$PKG/"
           cp scripts/portmaster/port.json "$PKG/"
           cp scripts/portmaster/wiliwili.gptk "$PKG/"
           cp resources/icon/icon.png "$PKG/wiliwili.png"
-
-          # Gamecontroller DB
-          if [ -f resources/gamepad/gamecontrollerdb.txt ]; then
-            cp resources/gamepad/gamecontrollerdb.txt "$PKG/"
-          else
-            wget -q https://raw.githubusercontent.com/gabomdq/SDL_GameControllerDB/master/gamecontrollerdb.txt \
-              -O "$PKG/gamecontrollerdb.txt" || true
-          fi
-
           chmod +x "$PKG/wiliwili.sh" "$PKG/wiliwili.aarch64"
 
-          # Create zip
+          # strip binary
+          strip "$PKG/wiliwili.aarch64" 2>/dev/null || true
+
           zip -r "wiliwili-Linux-aarch64-portmaster.zip" "$PKG/"
 
       - name: Upload artifact
