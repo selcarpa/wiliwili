@@ -7,13 +7,10 @@ on:
 env:
   CFLAGS: "-march=armv8-a -mtune=generic -O2"
   CXXFLAGS: "-march=armv8-a -mtune=generic -O2"
+  PREFIX: /opt/wiliwili
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [aarch64]
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout
@@ -23,97 +20,109 @@ jobs:
           fetch-depth: 0
 
       - name: Init nested submodules
-        run: |
-          git submodule update --init --recursive
+        run: git submodule update --init --recursive
 
-      - name: Install dependencies
+      - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libmpv-dev libwebp-dev libssl-dev libsdl2-dev \
-            libcurl4-openssl-dev libgl1-mesa-dev \
-            libegl1-mesa-dev libgles2-mesa-dev \
-            libass-dev libuchardet-dev \
-            pkg-config cmake build-essential
+            build-essential cmake pkg-config meson ninja-build nasm \
+            libssl-dev libsdl2-dev libcurl4-openssl-dev \
+            libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
+            libwebp-dev libuchardet-dev libfreetype-dev \
+            libfontconfig-dev libfribidi-dev libharfbuzz-dev \
+            libz-dev python3
+
+      - name: Build FFmpeg (minimal)
+        run: |
+          git clone --depth=1 --branch=release/7.1 https://git.ffmpeg.org/ffmpeg.git /tmp/ffmpeg
+          cd /tmp/ffmpeg
+          ./configure --prefix=$PREFIX --enable-shared --disable-static \
+            --disable-doc --disable-programs --disable-encoders --disable-muxers \
+            --disable-devices --disable-bsfs --disable-filters --disable-parsers \
+            --disable-postproc --enable-pic --enable-rpath \
+            --enable-decoder='h264,hevc,vp8,vp9,av1,aac,mp3,opus,flac,vorbis,aac_latm' \
+            --enable-demuxer='aac,ac3,ape,asf,avi,flac,flv,h264,hls,matroska,mov,mp3,mpegts,ogg,wav,webm' \
+            --enable-protocol='file,http,tcp,tls,https,httpproxy' \
+            --disable-network --enable-network \
+            --extra-cflags="$CFLAGS" --extra-cxxflags="$CXXFLAGS"
+          make -j$(nproc)
+          make install
+
+      - name: Build libplacebo
+        run: |
+          git clone --depth=1 --branch=v7.349.0 https://github.com/haasn/libplacebo.git /tmp/libplacebo
+          cd /tmp/libplacebo
+          meson setup build --prefix=$PREFIX --libdir=lib \
+            -Dvulkan=disabled -Dd3d11=disabled -Dopengl=enabled \
+            -Dgl-proc-addr=enabled -Dtests=false -Ddemos=false \
+            -Dlcms=disabled -Dshaderc=disabled
+          ninja -C build
+          ninja -C build install
+
+      - name: Build libmpv (minimal)
+        run: |
+          git clone --depth=1 --branch=v0.39.0 https://github.com/mpv-player/mpv.git /tmp/mpv
+          cd /tmp/mpv
+          PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig meson setup build --prefix=$PREFIX --libdir=lib \
+            -Dlibmpv=true -Dcplayer=false \
+            -Dvulkan=disabled -Ddvdnav=disabled -Dbluray=disabled \
+            -Djack=disabled -Dpulse=disabled -Dpipewire=disabled -Dsndio=disabled \
+            -Djavascript=disabled -Dlcms2=disabled -Dlibarchive=disabled \
+            -Dzimg=disabled -Drubberband=disabled \
+            -Dx11=disabled -Dwayland=disabled \
+            -Dlibplacebo=enabled \
+            -Degl=enabled -Dgles=enabled
+          ninja -C build
+          ninja -C build install
 
       - name: Apply borealis SDL gamepad patch
         run: |
           patch -d library/borealis -p1 < patches/borealis_sdl_gamepad.patch
-          echo "Patch applied: SDL input now loads gamecontrollerdb.txt"
 
-      - name: Configure CMake
+      - name: Configure wiliwili
         run: |
+          export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_FLAGS="$CFLAGS" \
             -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
             -DPLATFORM_DESKTOP=ON \
-            -DUSE_SDL2=ON \
-            -DUSE_GLES2=ON \
-            -DUSE_SYSTEM_SDL2=ON \
-            -DUSE_SYSTEM_CURL=ON \
+            -DUSE_SDL2=ON -DUSE_GLES2=ON \
+            -DUSE_SYSTEM_SDL2=ON -DUSE_SYSTEM_CURL=ON \
+            -DHOMEBREW_MPV=$PREFIX \
             -DBRLS_UNITY_BUILD=ON \
             -DCMAKE_UNITY_BUILD_BATCH_SIZE=16
 
-      - name: Build
+      - name: Build wiliwili
         run: |
+          export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig
+          export LD_LIBRARY_PATH=$PREFIX/lib
           cmake --build build -j$(nproc) --target wiliwili
 
-      - name: Show binary deps
-        run: |
-          echo "=== wiliwili direct dependencies ==="
-          ldd build/wiliwili | grep -E '=>|not found'
-          echo ""
-          echo "=== Binary info ==="
-          file build/wiliwili
-          readelf -h build/wiliwili | grep -i 'machine\|entry\|class'
-
-      - name: Package for PortMaster
+      - name: Package
         run: |
           PKG="wiliwili.port"
           mkdir -p "$PKG/libs" "$PKG/resources"
 
           cp build/wiliwili "$PKG/wiliwili.aarch64"
 
-          # Resolve the NEEDED libs to their real paths (first level only)
-          resolve_lib() {
-            local soname="$1"
-            ldconfig -p 2>/dev/null | grep -m1 "$soname " | awk '{print $NF}'
-          }
-
-          # Only bundle these specific libs (PortMaster devices lack these)
-          BUNDLE_LIST="
-            libmpv.so.2
-            libavcodec.so.60
-            libavdevice.so.60
-            libavfilter.so.9
-            libavformat.so.60
-            libavutil.so.58
-            libswresample.so.4
-            libswscale.so.7
-            libpostproc.so.57
-            libplacebo.so.338
-            libshaderc_shared.so.1
-            libcurl.so.4
-            libssl.so.3
-            libcrypto.so.3
-            libwebp.so.7
-            libsharpyuv.so.0
-            libSDL2-2.0.so.0
-            libuchardet.so.0
-          "
-
-          for soname in $BUNDLE_LIST; do
-            libpath=$(resolve_lib "$soname")
-            if [ -n "$libpath" ] && [ -f "$libpath" ]; then
-              cp -L "$libpath" "$PKG/libs/"
-              echo "  bundled: $soname ($(du -sh "$libpath" | cut -f1))"
-            else
-              echo "  NOT FOUND: $soname"
-            fi
+          # Bundle self-built libs + runtime deps from $PREFIX
+          for lib in $PREFIX/lib/libmpv.so* $PREFIX/lib/libavcodec.so* \
+                     $PREFIX/lib/libavformat.so* $PREFIX/lib/libavutil.so* \
+                     $PREFIX/lib/libswscale.so* $PREFIX/lib/libswresample.so* \
+                     $PREFIX/lib/libplacebo.so* $PREFIX/lib/libpostproc.so*; do
+            [ -f "$lib" ] && cp -L "$lib" "$PKG/libs/"
           done
 
-          echo "=== Bundled libs: $(ls "$PKG/libs/" | wc -l) ==="
+          # Also bundle SDL2, curl, webp, uchardet (may not be on device)
+          for soname in libSDL2-2.0.so.0 libcurl.so.4 libssl.so.3 libcrypto.so.3 \
+                        libwebp.so.7 libuchardet.so.0; do
+            lib=$(ldconfig -p 2>/dev/null | grep -m1 "$soname " | awk '{print $NF}')
+            [ -n "$lib" ] && [ -f "$lib" ] && cp -L "$lib" "$PKG/libs/"
+          done
+
+          strip "$PKG/wiliwili.aarch64" 2>/dev/null || true
 
           cp -r resources/* "$PKG/resources/" 2>/dev/null || true
           cp scripts/portmaster/wiliwili.sh "$PKG/"
@@ -122,12 +131,11 @@ jobs:
           cp resources/icon/icon.png "$PKG/wiliwili.png"
           chmod +x "$PKG/wiliwili.sh" "$PKG/wiliwili.aarch64"
 
-          # strip binary
-          strip "$PKG/wiliwili.aarch64" 2>/dev/null || true
-
+          echo "=== Bundled ($(ls $PKG/libs/ | wc -l) libs) ==="
+          ls -1 "$PKG/libs/"
           zip -r "wiliwili-Linux-aarch64-portmaster.zip" "$PKG/"
 
-      - name: Upload artifact
+      - name: Upload
         uses: actions/upload-artifact@v6
         with:
           name: wiliwili-Linux-aarch64-portmaster
