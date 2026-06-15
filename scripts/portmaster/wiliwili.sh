@@ -1,48 +1,47 @@
 #!/bin/bash
-#
-# wiliwili PortMaster 启动脚本
-# 放置在 /roms/ports/wiliwili/ 目录下
 
-# ---- PortMaster 运行时初始化 ----
+XDG_DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}
+
 if [ -d "/opt/system/Tools/PortMaster/" ]; then
-    controlfolder="/opt/system/Tools/PortMaster"
+  controlfolder="/opt/system/Tools/PortMaster"
 elif [ -d "/opt/tools/PortMaster/" ]; then
-    controlfolder="/opt/tools/PortMaster"
+  controlfolder="/opt/tools/PortMaster"
+elif [ -d "$XDG_DATA_HOME/PortMaster/" ]; then
+  controlfolder="$XDG_DATA_HOME/PortMaster"
 else
-    controlfolder="/roms/ports/PortMaster"
+  controlfolder="/roms/ports/PortMaster"
 fi
 
-source "$controlfolder/control.txt"
+source $controlfolder/control.txt
+
+[ -f "${controlfolder}/mod_${CFW_NAME}.txt" ] && source "${controlfolder}/mod_${CFW_NAME}.txt"
+
 get_controls
 
-cd "/$directory/ports/wiliwili"
+GAMEDIR=/$directory/ports/wiliwili/
+CONFDIR="$GAMEDIR/conf/"
+PKGDIR="$GAMEDIR/wiliwili"
 
-# ---- 环境变量设置 ----
+mkdir -p "$GAMEDIR/conf"
+
+cd $GAMEDIR
+
+> "$GAMEDIR/log.txt" && exec > >(tee "$GAMEDIR/log.txt") 2>&1
+
+export XDG_DATA_HOME="$CONFDIR"
+export LD_LIBRARY_PATH="$PKGDIR/libs.${DEVICE_ARCH}:$LD_LIBRARY_PATH"
 export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
-export LD_LIBRARY_PATH="$PWD/libs:$LD_LIBRARY_PATH"
 
-# 如果存在自定义映射，使用它
-if [ -f "$PWD/gamecontrollerdb.txt" ]; then
-    export SDL_GAMECONTROLLERCONFIG_FILE="$PWD/gamecontrollerdb.txt"
+# If a custom gamecontrollerdb exists, use it
+if [ -f "$PKGDIR/gamecontrollerdb.txt" ]; then
+    export SDL_GAMECONTROLLERCONFIG_FILE="$PKGDIR/gamecontrollerdb.txt"
 fi
 
-# ---- 输入后台进程 ----
-# gptokeyb 将手柄按键映射为键盘/鼠标事件，并负责退出手势
-$GPTOKEYB "wiliwili" -c "./wiliwili.gptk" &
-GPTOKEYB_PID=$!
+bind_directories ~/.config/wiliwili "$CONFDIR"
 
-# 确保 uinput 可访问
-$ESUDO chmod 666 /dev/uinput 2>/dev/null || true
+$GPTOKEYB "wiliwili" -c "$PKGDIR/wiliwili.gptk" &
+pm_platform_helper "$PKGDIR/wiliwili.${DEVICE_ARCH}"
+cd "$PKGDIR"
+./wiliwili.${DEVICE_ARCH}
 
-# ---- 启动 wiliwili ----
-# 设置 480p UI 缩放以适配 640x480 或更小的屏幕
-./wiliwili.aarch64 \
-    --window-width=640 \
-    --window-height=480
-
-# ---- 清理 ----
-kill "$GPTOKEYB_PID" 2>/dev/null || true
-$ESUDO systemctl restart oga_events 2>/dev/null || true
-
-# 清理终端
-printf "\033c" > /dev/tty1 2>/dev/null || true
+pm_finish

@@ -1,29 +1,21 @@
 {
-  "version": 2,
-  "name": "wiliwili",
-  "author": "xfangfang",
-  "porter": "xfangfang",
-  "description": "A third-party Bilibili client designed specifically for controller users.\nB站第三方客户端，专为手柄用户设计。",
-  "url": "https://github.com/xfangfang/wiliwili",
-  "license": "GPL-3.0",
-  "runtime": [
-    "mesa"
-  ],
-  "reqs": [
-    "sdl2"
-  ],
-  "provision": [
-    "libs"
-  ],
-  "platforms": [
-    "aarch64"
-  ],
-  "launch": [
-    {
-      "name": "wiliwili",
-      "icon": "wiliwili.png",
-      "script": "./wiliwili.sh",
-      "description": "Bilibili client for controller users"
+    "version": 2,
+    "name": "wiliwili.zip",
+    "items": [
+        "wiliwili.sh",
+        "wiliwili"
+    ],
+    "items_opt": null,
+    "attr": {
+        "title": "wiliwili",
+        "desc": "A third-party Bilibili client designed specifically for controller users.\nB站第三方客户端，专为手柄用户设计。",
+        "inst": "Ready to run.",
+        "genres": ["video"],
+        "porter": "xfangfang",
+        "image": {},
+        "rtr": true,
+        "runtime": null,
+        "reqs": ["sdl2"],
+        "arch": ["aarch64"]
     }
-  ]
 }

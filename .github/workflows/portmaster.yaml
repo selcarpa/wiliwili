@@ -50,53 +50,74 @@ jobs:
 
       - name: Package
         run: |
-          PKG="wiliwili.port"
-          mkdir -p "$PKG/libs" "$PKG/resources"
-          cp build/wiliwili "$PKG/wiliwili.aarch64"
-          strip "$PKG/wiliwili.aarch64" 2>/dev/null || true
+          # PortMaster structure:
+          # wiliwili/           ← top-level (what github zips)
+          #   port.json
+          #   README.md
+          #   screenshot.png
+          #   gameinfo.xml
+          #   wiliwili.sh
+          #   wiliwili/          ← port data directory
+          #     licenses/
+          #     libs.aarch64/
+          #     resources/
+          #     wiliwili.aarch64
+          #     wiliwili.gptk
+          #     gamecontrollerdb.txt
 
-          # Collect all runtime deps recursively (skip GPU driver libs)
+          TOP="wiliwili"
+          PKG="$TOP/wiliwili"
+          ARCH="aarch64"
+
+          mkdir -p "$PKG/libs.${ARCH}" "$PKG/resources" "$PKG/licenses"
+
+          cp build/wiliwili "$PKG/wiliwili.${ARCH}"
+          strip "$PKG/wiliwili.${ARCH}" 2>/dev/null || true
+
+          # Collect runtime deps recursively
+          # Skip GPU driver libs and system libs (must come from device)
           SKIP='libEGL\.\|libGLESv2\.\|libGL\.so\|libgbm\.\|libvulkan\.\|libc\.so\.\|libm\.so\.\|libstdc++\.\|libgcc_s\.\|ld-linux'
           collect() {
-            ldd "$1" 2>/dev/null | awk '{print $3}' | grep -v '^\s*$' | grep -v "$SKIP"
+            ldd "$1" 2>/dev/null | awk '{print $3}' | grep -v '^\s*$'
           }
           copy_lib() {
-            local src="$1" dst="$PKG/libs/$(basename "$src")"
+            local src="$1" dst="$PKG/libs.${ARCH}/$(basename "$src")"
             [ -f "$dst" ] && return 0
             cp -L "$src" "$dst" 2>/dev/null || return 1
           }
-          # First pass: binary
           while IFS= read -r lib; do
             [ -z "$lib" ] && continue
+            echo "$lib" | grep -q "$SKIP" && continue
             copy_lib "$lib" || true
-          done < <(collect "$PKG/wiliwili.aarch64")
-          # Iterate until no new libs found
-          PREV=0; CURR=$(ls "$PKG/libs/" | wc -l)
+          done < <(collect "$PKG/wiliwili.${ARCH}")
+          PREV=0; CURR=$(ls "$PKG/libs.${ARCH}/" | wc -l)
           while [ "$CURR" -gt "$PREV" ]; do
             PREV=$CURR
-            for f in "$PKG/libs/"*.so*; do
+            for f in "$PKG/libs.${ARCH}/"*.so*; do
               while IFS= read -r lib; do
                 [ -z "$lib" ] && continue
+                echo "$lib" | grep -q "$SKIP" && continue
                 copy_lib "$lib" || true
               done < <(collect "$f")
             done
-            CURR=$(ls "$PKG/libs/" | wc -l)
+            CURR=$(ls "$PKG/libs.${ARCH}/" | wc -l)
           done
 
-          echo "=== Bundled: $(ls "$PKG/libs/" | wc -l) libs ==="
-          du -sh "$PKG/libs/"
+          echo "=== Bundled: $(ls "$PKG/libs.${ARCH}/" | wc -l) libs ==="
+          du -sh "$PKG/libs.${ARCH}/"
 
           cp -r resources/* "$PKG/resources/" 2>/dev/null || true
-          cp scripts/portmaster/wiliwili.sh "$PKG/"
-          cp scripts/portmaster/port.json "$PKG/"
+          cp scripts/portmaster/wiliwili.sh "$TOP/"
+          cp scripts/portmaster/port.json "$TOP/"
+          cp scripts/portmaster/README.md "$TOP/"
           cp scripts/portmaster/wiliwili.gptk "$PKG/"
-          cp resources/icon/icon.png "$PKG/wiliwili.png"
+          cp resources/icon/icon.png "$PKG/"
           [ -f resources/gamepad/gamecontrollerdb.txt ] && \
             cp resources/gamepad/gamecontrollerdb.txt "$PKG/" || true
-          chmod +x "$PKG/wiliwili.sh" "$PKG/wiliwili.aarch64"
+          chmod +x "$TOP/wiliwili.sh" "$PKG/wiliwili.${ARCH}"
 
       - name: Upload
         uses: actions/upload-artifact@v6
         with:
           name: wiliwili-Linux-aarch64-portmaster
-          path: wiliwili.port/
+          path: wiliwili/
